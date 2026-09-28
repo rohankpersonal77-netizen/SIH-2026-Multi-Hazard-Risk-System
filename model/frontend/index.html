@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maharashtra Flood Early Warning &amp; Risk Intelligence Map</title>
+  <meta name="description" content="Professional GIS-style flood prediction and early warning system for Maharashtra, India. Decision-support map featuring localized hazard footprints, multi-horizon forecasts, and telemetry." />
+
+  <!-- Leaflet.js CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Project CSS -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="gis-app-body">
+
+<!-- ═══════════════════════════════════════════════════════════
+     TOP NAVIGATION & TELEMETRY HEADER
+═══════════════════════════════════════════════════════════ -->
+<header class="gis-header" id="gis-header">
+  <div class="header-brand">
+    <div class="brand-badge">GIS</div>
+    <div class="brand-text">
+      <div class="brand-title">MAHARASHTRA FLOOD HAZARD &amp; RISK MAP</div>
+      <div class="brand-subtitle">Hydro-Meteorological Decision-Support System &bull; State LGD Code 27</div>
+    </div>
+  </div>
+
+  <div class="header-center-controls">
+    <!-- Forecast Horizon Selector -->
+    <div class="horizon-control-group" role="group" aria-label="Forecast Horizon Selector">
+      <span class="horizon-group-label">FORECAST HORIZON:</span>
+      <div class="horizon-buttons" id="horizon-selector">
+        <button class="horizon-btn" data-horizon="6h" id="btn-6h" aria-pressed="false" title="6-Hour Flood Risk Probability Horizon">
+          <span class="h-icon">⚡</span> 6 HOURS
+        </button>
+        <button class="horizon-btn" data-horizon="12h" id="btn-12h" aria-pressed="false" title="12-Hour Flood Risk Probability Horizon">
+          <span class="h-icon">🕛</span> 12 HOURS
+        </button>
+        <button class="horizon-btn active" data-horizon="24h" id="btn-24h" aria-pressed="true" title="24-Hour Flood Risk Probability Horizon">
+          <span class="h-icon">📅</span> 24 HOURS
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick View Presets Toolbar -->
+    <div class="view-presets-container" id="view-presets-container">
+      <span class="presets-label">VIEW PRESETS:</span>
+      <div class="preset-buttons">
+        <button class="preset-btn active" data-view="overview" title="Full Maharashtra Overview with All Layers">Overview</button>
+        <button class="preset-btn" data-view="risk-focus" title="Zoom directly to HIGH &amp; EXTREME risk footprints">Risk Focus</button>
+        <button class="preset-btn" data-view="river-monitoring" title="Emphasize River network, gauge stations, and discharge">Rivers</button>
+        <button class="preset-btn" data-view="rainfall-monitoring" title="Emphasize IMD rainfall stations and precipitation intensity">Rainfall</button>
+        <button class="preset-btn" data-view="historical" title="Display Landmark Historical Floods">Historical</button>
+        <button class="preset-btn" data-view="satellite" title="Satellite Imagery Mode">Satellite</button>
+        <button class="preset-btn" data-view="terrain" title="Topographic Terrain Mode">Terrain</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="header-telemetry">
+    <div class="status-chip online" id="model-status-chip">
+      <span class="status-dot"></span>
+      <span class="status-text" id="model-status-text">Hydrological Model Ready</span>
+    </div>
+    <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle Telemetry &amp; District Rankings Panel">
+      <span class="toggle-icon">📊</span> <span class="toggle-label">Data Panel</span>
+    </button>
+    <button class="refresh-btn" id="refresh-btn" title="Refresh Live Hydro-Data" aria-label="Refresh data">
+      <span class="refresh-icon" id="refresh-icon">⟳</span>
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════
+     DISCLAIMER BANNER
+═══════════════════════════════════════════════════════════ -->
+<div class="gis-disclaimer-strip" id="disclaimer-strip">
+  <span class="disclaimer-tag">NOTICE</span>
+  <span class="disclaimer-message">
+    <strong>Decision-Support &amp; Research System:</strong> Localized risk footprints indicate model-based probability estimates. This platform does not replace statutory flood bulletins from
+    <a href="https://mausam.imd.gov.in" target="_blank" rel="noopener">IMD</a>,
+    <a href="http://cwc.gov.in" target="_blank" rel="noopener">CWC</a>, or
+    <a href="https://ndma.gov.in" target="_blank" rel="noopener">NDMA / SDMA</a>.
+  </span>
+  <button class="strip-dismiss-btn" id="dismiss-disclaimer" aria-label="Dismiss banner">✕</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     EXTREME RISK WARNING HUD (Dynamic Banner)
+═══════════════════════════════════════════════════════════ -->
+<div class="gis-extreme-hud" id="gis-extreme-hud" style="display:none;">
+  <div class="hud-left">
+    <span class="hud-pulse-dot"></span>
+    <div class="hud-info">
+      <div class="hud-headline">🔴 EXTREME FLOOD RISK DETECTED</div>
+      <div class="hud-subheadline" id="hud-extreme-count">Localized High-Hazard Zones Identified</div>
+    </div>
+  </div>
+  <div class="hud-metrics">
+    <div class="hud-metric-box">
+      <span class="hud-m-label">Highest Probability</span>
+      <span class="hud-m-val" id="hud-highest-prob">95%</span>
+    </div>
+    <div class="hud-metric-box">
+      <span class="hud-m-label">Forecast Horizon</span>
+      <span class="hud-m-val" id="hud-horizon-tag">24 Hours</span>
+    </div>
+    <div class="hud-metric-box">
+      <span class="hud-m-label">Indication Type</span>
+      <span class="hud-m-val highlight">Model Risk Area</span>
+    </div>
+  </div>
+  <div class="hud-action-box">
+    <button class="hud-action-btn" id="hud-focus-btn">🎯 Focus Highest-Risk Area</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN GIS CANVAS & WORKSPACE
+═══════════════════════════════════════════════════════════ -->
+<div class="gis-workspace" id="gis-workspace">
+
+  <!-- THE DOMINANT FULL-SCREEN LEAFLET MAP CANVAS -->
+  <main class="gis-map-canvas" id="map-container">
+    <div id="map" aria-label="Maharashtra Interactive GIS Risk Map"></div>
+
+    <!-- ─────────────────────────────────────────────────────────
+         TOP-LEFT: BASEMAP SWITCHER PANEL
+    ───────────────────────────────────────────────────────── -->
+    <div class="gis-hud-panel basemap-hud" id="gis-basemap-panel">
+      <div class="hud-panel-title">
+        <span class="panel-tag-icon">🗺️</span> BASEMAP LAYER
+      </div>
+      <div class="basemap-options-grid">
+        <button class="basemap-option-btn active" data-basemap="vector" id="bm-vector" title="High-contrast dark vector map">
+          <span class="bm-icon">◼</span> Vector
+        </button>
+        <button class="basemap-option-btn" data-basemap="satellite" id="bm-satellite" title="High-resolution satellite imagery with labels">
+          <span class="bm-icon">🛰</span> Satellite
+        </button>
+        <button class="basemap-option-btn" data-basemap="terrain" id="bm-terrain" title="Topographic contours and relief elevation">
+          <span class="bm-icon">⛰</span> Terrain
+        </button>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────
+         TOP-RIGHT: GIS LAYER CONTROLLER PANEL
+    ───────────────────────────────────────────────────────── -->
+    <div class="gis-hud-panel layers-hud" id="gis-layer-panel">
+      <div class="hud-panel-header" id="layers-panel-header">
+        <div class="hud-header-title">
+          <span class="panel-tag-icon">⚙️</span> GIS LAYER CONTROLLER
+        </div>
+        <button class="hud-collapse-btn" id="btn-collapse-layers" title="Toggle Layer Panel">▾</button>
+      </div>
+      <div class="hud-panel-body" id="layers-panel-body">
+        
+        <!-- Primary Hazard Layer -->
+        <div class="layer-section">
+          <div class="layer-section-title">PREDICTIVE HAZARD</div>
+          <label class="gis-toggle-row" for="layer-predicted-risk">
+            <input type="checkbox" id="layer-predicted-risk" checked data-layer="predictedRisk" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Predicted Flood Risk</strong>
+              <span class="layer-subtext">Localized organic hazard zones (6h/12h/24h)</span>
+            </span>
+            <span class="layer-badge-primary">PRIMARY</span>
+          </label>
+          <label class="gis-toggle-row" for="layer-district-boundaries">
+            <input type="checkbox" id="layer-district-boundaries" checked data-layer="districtBoundaries" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>District Boundaries</strong>
+              <span class="layer-subtext">Neutral administrative outlines (no whole-district fills)</span>
+            </span>
+          </label>
+        </div>
+
+        <!-- Hydro-Meteorological Stations & Network -->
+        <div class="layer-section">
+          <div class="layer-section-title">HYDROLOGY &amp; SENSORS</div>
+          <label class="gis-toggle-row" for="layer-river-stations">
+            <input type="checkbox" id="layer-river-stations" checked data-layer="riverStations" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>River Stations &amp; Discharge</strong>
+              <span class="layer-subtext">53 CWC telemetry &amp; manual gauge stations</span>
+            </span>
+          </label>
+          <label class="gis-toggle-row" for="layer-river-network">
+            <input type="checkbox" id="layer-river-network" checked data-layer="riverNetwork" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Maharashtra River Network</strong>
+              <span class="layer-subtext">Godavari, Krishna, Bhima, Savitri, Vashisti, Ulhas</span>
+            </span>
+          </label>
+          <label class="gis-toggle-row" for="layer-rainfall-stations">
+            <input type="checkbox" id="layer-rainfall-stations" checked data-layer="rainfallStations" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Rainfall Stations (IMD)</strong>
+              <span class="layer-subtext">Daily precipitation &amp; departure intensity</span>
+            </span>
+          </label>
+        </div>
+
+        <!-- Archival, Logistics & Overlays -->
+        <div class="layer-section">
+          <div class="layer-section-title">DISASTER RESPONSE &amp; ARCHIVES</div>
+          <label class="gis-toggle-row" for="layer-historical-floods">
+            <input type="checkbox" id="layer-historical-floods" data-layer="historicalFloods" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Historical Flood Events</strong>
+              <span class="layer-subtext">Verified 2005 Mumbai, 2019 Kolhapur, 2021 Chiplun</span>
+            </span>
+          </label>
+          <label class="gis-toggle-row" for="layer-candidate-sites">
+            <input type="checkbox" id="layer-candidate-sites" data-layer="candidateSites" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Candidate Relief Sites (RS)</strong>
+              <span class="layer-subtext">DDMA high-elevation shelters &amp; staging camps</span>
+            </span>
+          </label>
+          <label class="gis-toggle-row" for="layer-isohyet-overlay">
+            <input type="checkbox" id="layer-isohyet-overlay" data-layer="isohyetOverlay" />
+            <span class="gis-switch"></span>
+            <span class="gis-label-text">
+              <strong>Rainfall Isohyet Overlay</strong>
+              <span class="layer-subtext">Precipitation gradient across Western Ghats</span>
+            </span>
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────
+         FLOATING GIS NAVIGATION TOOLBAR
+    ───────────────────────────────────────────────────────── -->
+    <div class="gis-nav-toolbar" id="gis-nav-toolbar">
+      <button class="nav-icon-btn" id="nav-zoom-in" title="Zoom In">+</button>
+      <button class="nav-icon-btn" id="nav-zoom-out" title="Zoom Out">−</button>
+      <div class="nav-divider"></div>
+      <button class="nav-action-btn focus-btn" id="nav-focus-risk" title="Automatically zoom to all active HIGH and EXTREME risk zones">
+        <span class="btn-icon">🎯</span> Focus Risk Areas
+      </button>
+      <button class="nav-action-btn reset-btn" id="nav-reset-view" title="Reset to full Maharashtra view">
+        <span class="btn-icon">🗺️</span> Reset Maharashtra View
+      </button>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────
+         BOTTOM-LEFT: MAP LEGEND PANEL
+    ───────────────────────────────────────────────────────── -->
+    <div class="gis-hud-panel legend-hud" id="gis-legend-panel">
+      <div class="hud-panel-title">
+        <span class="panel-tag-icon">🎯</span> MAP LEGEND
+      </div>
+      <div class="legend-subheading">FLOOD RISK (MODEL RISK AREA)</div>
+      <div class="legend-items-list">
+        <div class="legend-entry" data-level="LOW" title="Click to filter LOW risk zones">
+          <div class="swatch low"></div>
+          <div class="entry-labels">
+            <span class="entry-level">🟢 LOW</span>
+            <span class="entry-range">0% – 30%</span>
+          </div>
+        </div>
+        <div class="legend-entry" data-level="MEDIUM" title="Click to filter MEDIUM risk zones">
+          <div class="swatch medium"></div>
+          <div class="entry-labels">
+            <span class="entry-level">🟡 MEDIUM</span>
+            <span class="entry-range">30% – 60%</span>
+          </div>
+        </div>
+        <div class="legend-entry" data-level="HIGH" title="Click to filter HIGH risk zones">
+          <div class="swatch high"></div>
+          <div class="entry-labels">
+            <span class="entry-level">🟠 HIGH</span>
+            <span class="entry-range">60% – 80%</span>
+          </div>
+        </div>
+        <div class="legend-entry" data-level="EXTREME" title="Click to filter EXTREME risk zones">
+          <div class="swatch extreme pulse"></div>
+          <div class="entry-labels">
+            <span class="entry-level">🔴 EXTREME</span>
+            <span class="entry-range">80% – 100%</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend-status-strip">
+        <div class="status-row">
+          <span class="status-key">Forecast:</span>
+          <span class="status-val" id="legend-horizon-val">Next 24 Hours</span>
+        </div>
+        <div class="status-row">
+          <span class="status-key">Footprint:</span>
+          <span class="status-val">Localized GIS Risk Zone</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────
+         BOTTOM/LOWER BAR: STATUS & TIMESTAMP
+    ───────────────────────────────────────────────────────── -->
+    <div class="gis-bottom-bar" id="gis-bottom-bar">
+      <div class="bottom-bar-item">
+        <span class="bb-key">Status:</span>
+        <span class="bb-val highlight">Hydrological Prediction Active</span>
+      </div>
+      <div class="bottom-bar-separator">|</div>
+      <div class="bottom-bar-item">
+        <span class="bb-key">Last Updated:</span>
+        <span class="bb-val" id="last-updated-timestamp">Syncing...</span>
+      </div>
+      <div class="bottom-bar-separator">|</div>
+      <div class="bottom-bar-item">
+        <span class="bb-key">Forecast:</span>
+        <span class="bb-val" id="bottom-forecast-tag">Next 24 Hours</span>
+      </div>
+      <div class="bottom-bar-separator">|</div>
+      <div class="bottom-bar-item">
+        <span class="bb-key">Active Model:</span>
+        <span class="bb-val" id="bottom-model-tag">CWC Hydrology + IMD Rainfall Proxy</span>
+      </div>
+    </div>
+
+    <!-- Map Loading Overlay -->
+    <div class="map-loading-overlay" id="map-loading">
+      <div class="loading-spinner large"></div>
+      <p class="loading-text">Assembling Maharashtra GIS layers &amp; risk footprints...</p>
+    </div>
+  </main>
+
+  <!-- ─────────────────────────────────────────────────────────
+       COLLAPSIBLE TELEMETRY & DISTRICT RANKINGS SIDEBAR
+  ───────────────────────────────────────────────────────── -->
+  <aside class="gis-telemetry-sidebar" id="gis-telemetry-sidebar">
+    <div class="sidebar-header">
+      <div class="sb-title">
+        <span class="sb-icon">📊</span>
+        <span>RISK TELEMETRY</span>
+      </div>
+      <button class="sidebar-close-btn" id="sidebar-close-btn" title="Close sidebar">✕</button>
+    </div>
+
+    <div class="sidebar-content">
+      <!-- High Risk Summary Cards -->
+      <div class="sidebar-section">
+        <div class="sb-section-title">RISK SUMMARY</div>
+        <div class="risk-stats-grid">
+          <div class="risk-stat-card extreme">
+            <div class="r-count" id="count-extreme">0</div>
+            <div class="r-lbl">EXTREME</div>
+          </div>
+          <div class="risk-stat-card high">
+            <div class="r-count" id="count-high">0</div>
+            <div class="r-lbl">HIGH</div>
+          </div>
+          <div class="risk-stat-card medium">
+            <div class="r-count" id="count-medium">0</div>
+            <div class="r-lbl">MEDIUM</div>
+          </div>
+          <div class="risk-stat-card low">
+            <div class="r-count" id="count-low">0</div>
+            <div class="r-lbl">LOW</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- District Probability Table -->
+      <div class="sidebar-section">
+        <div class="sb-section-title">PREDICTION LOCATIONS</div>
+        <div class="table-container">
+          <table class="telemetry-table" id="telemetry-table">
+            <thead>
+              <tr>
+                <th>Location / District</th>
+                <th>Probability</th>
+                <th>Risk</th>
+              </tr>
+            </thead>
+            <tbody id="telemetry-table-body">
+              <tr class="loading-row">
+                <td colspan="3">Loading risk intelligence...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Station Telemetry Section -->
+      <div class="sidebar-section">
+        <div class="sb-section-title">ACTIVE RIVER GAUGES (CWC)</div>
+        <div class="station-telemetry-list" id="sidebar-station-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     DISTRICT & HAZARD ZONE DETAIL MODAL / DRAWER
+═══════════════════════════════════════════════════════════ -->
+<div class="gis-detail-drawer" id="gis-detail-drawer" style="display:none;">
+  <div class="drawer-header">
+    <div class="drawer-title-group">
+      <span class="drawer-badge" id="drawer-risk-badge">EXTREME</span>
+      <h2 class="drawer-title" id="drawer-title">Location Name</h2>
+    </div>
+    <button class="drawer-close-btn" id="drawer-close-btn" aria-label="Close details">✕</button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <!-- Populated dynamically -->
+  </div>
+</div>
+
+<!-- Project JavaScript -->
+<script src="js/map.js"></script>
+</body>
+</html>
